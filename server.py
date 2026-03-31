@@ -1,8 +1,25 @@
-from fastapi import FastAPI, File, UploadFile, Form
-from fastapi.responses import FileResponse
-import shutil, subprocess, uuid, os
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+import subprocess
+import uuid
+import os
+from fastapi import Form
+import shutil
 
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"
+WORK_DIR = "jobs"
+os.makedirs(WORK_DIR, exist_ok=True)
+
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    with open("index.html", "r") as f:
+        return f.read()
 
 
 @app.post("/generate")
@@ -35,7 +52,7 @@ async def generate(
             shutil.copyfileobj(fileB.file, f)
 
     cmd = [
-        "blender",
+        BLENDER,
         "-b",
         "template.blend",
         "-P",
