@@ -5,6 +5,7 @@
     <title>Ramp Logo Tool</title>
     <style>
         body {
+            margin: 0;
             display: flex;
             font-family: Arial;
             background: #222;
@@ -12,25 +13,40 @@
         }
 
         .panel {
-            width: 300px;
+            width: 320px;
             padding: 10px;
             background: #333;
+            overflow-y: auto;
         }
 
-        .viewer {
+        .canvas {
             flex: 1;
+            position: relative;
+            background: #555;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        img {
-            max-width: 100%;
+        #canvasInner {
+            position: relative;
+            width: 800px;
+            height: 250px;
+            background: #777;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .logo {
+            position: absolute;
+            transform-origin: center center;
+            pointer-events: none;
         }
 
         label {
             display: block;
             margin-top: 10px;
+            font-size: 13px;
         }
 
         input[type=range] {
@@ -38,7 +54,7 @@
         }
 
         .debug {
-            font-size: 12px;
+            font-size: 11px;
             color: #aaa;
             margin-top: 5px;
         }
@@ -50,6 +66,11 @@
             background: #4CAF50;
             color: white;
             border: none;
+            cursor: pointer;
+        }
+
+        img {
+            max-width: 150px;
         }
     </style>
 </head>
@@ -62,10 +83,10 @@
         <input type="file" id="fileA">
 
         <label>X Position</label>
-        <input type="range" id="xA" min="-100" max="100" value="0">
+        <input type="range" id="xA" min="0" max="800" value="100">
 
         <label>Y Position</label>
-        <input type="range" id="yA" min="-50" max="50" value="0">
+        <input type="range" id="yA" min="0" max="250" value="100">
 
         <label>Scale</label>
         <input type="range" id="scaleA" min="1" max="100" value="20">
@@ -83,10 +104,10 @@
         <input type="file" id="fileB">
 
         <label>X Position</label>
-        <input type="range" id="xB" min="-100" max="100" value="0">
+        <input type="range" id="xB" min="0" max="800" value="300">
 
         <label>Y Position</label>
-        <input type="range" id="yB" min="-50" max="50" value="0">
+        <input type="range" id="yB" min="0" max="250" value="100">
 
         <label>Scale</label>
         <input type="range" id="scaleB" min="1" max="100" value="20">
@@ -99,57 +120,112 @@
 
         <div class="debug" id="debugB"></div>
 
-        <button onclick="generate()">Generate STL</button>
+        <button type="button" onclick="generate()">Generate STL</button>
 
     </div>
 
-    <div class="viewer">
-        <img id="preview" src="" />
+    <div class="canvas">
+        <div id="canvasInner">
+
+            <!-- LOGO PREVIEWS -->
+            <img id="previewA" class="logo">
+            <img id="previewB" class="logo">
+
+        </div>
     </div>
 
     <script>
-        function updateDebug() {
-            debugA.innerText = `A: x=${xA.value}, y=${yA.value}, scale=${scaleA.value}, z=${heightA.value}`;
-            debugB.innerText = `B: x=${xB.value}, y=${yB.value}, scale=${scaleB.value}, z=${heightB.value}`;
+        const previewA = document.getElementById("previewA");
+        const previewB = document.getElementById("previewB");
+
+        // LOAD SVG PREVIEW
+        fileA.onchange = () => {
+            const f = fileA.files[0];
+            if (f) previewA.src = URL.createObjectURL(f);
+        };
+
+        fileB.onchange = () => {
+            const f = fileB.files[0];
+            if (f) previewB.src = URL.createObjectURL(f);
+        };
+
+
+        // UPDATE VISUAL POSITION
+        function updatePreview() {
+
+            // A
+            previewA.style.left = xA.value + "px";
+            previewA.style.top = yA.value + "px";
+            previewA.style.transform =
+                `translate(-50%, -50%) scale(${scaleA.value / 20}) rotate(${rotA.value}deg)`;
+
+            // B
+            previewB.style.left = xB.value + "px";
+            previewB.style.top = yB.value + "px";
+            previewB.style.transform =
+                `translate(-50%, -50%) scale(${scaleB.value / 20}) rotate(${rotB.value}deg)`;
+
+            // DEBUG
+            debugA.innerText =
+                `UI → x:${xA.value}, y:${yA.value}, scale:${scaleA.value}, z:${heightA.value}`;
+
+            debugB.innerText =
+                `UI → x:${xB.value}, y:${yB.value}, scale:${scaleB.value}, z:${heightB.value}`;
         }
 
-        document.querySelectorAll("input").forEach(el => {
-            el.oninput = updateDebug;
+
+        // SLIDER HOOKS
+        document.querySelectorAll("input[type=range]").forEach(el => {
+            el.oninput = updatePreview;
         });
 
-        updateDebug();
+        updatePreview();
 
+
+        // SEND TO BACKEND
         async function generate() {
+
             const formData = new FormData();
 
-            // FILES
             if (fileA.files[0]) formData.append("fileA", fileA.files[0]);
             if (fileB.files[0]) formData.append("fileB", fileB.files[0]);
 
-            // LOGO A
-            formData.append("xA", parseFloat(xA.value));
-            formData.append("yA", parseFloat(yA.value));
-            formData.append("scaleA", parseFloat(scaleA.value));
-            formData.append("rotA", parseFloat(rotA.value));
-            formData.append("heightA", parseFloat(heightA.value));
+            // CONVERT UI PIXELS → BLENDER SPACE
+            // simple linear mapping (adjust later if needed)
+            const scaleFactor = 0.05;
 
-            // LOGO B
-            formData.append("xB", parseFloat(xB.value));
-            formData.append("yB", parseFloat(yB.value));
-            formData.append("scaleB", parseFloat(scaleB.value));
-            formData.append("rotB", parseFloat(rotB.value));
-            formData.append("heightB", parseFloat(heightB.value));
+            formData.append("xA", xA.value * scaleFactor);
+            formData.append("yA", yA.value * scaleFactor);
+            formData.append("scaleA", scaleA.value);
+            formData.append("rotA", rotA.value);
+            formData.append("heightA", heightA.value);
 
-            console.log("SENDING FORM:", Object.fromEntries(formData));
+            formData.append("xB", xB.value * scaleFactor);
+            formData.append("yB", yB.value * scaleFactor);
+            formData.append("scaleB", scaleB.value);
+            formData.append("rotB", rotB.value);
+            formData.append("heightB", heightB.value);
 
-            const res = await fetch("http://127.0.0.1:8000/generate", {
+            console.log("FORM:", Object.fromEntries(formData));
+
+            const res = await fetch("/generate", {
                 method: "POST",
                 body: formData
             });
 
+            if (!res.ok) {
+                console.error("FAILED", await res.text());
+                return;
+            }
+
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
-            preview.src = url;
+
+            // DOWNLOAD FILE
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "ramp.stl";
+            a.click();
         }
     </script>
 
