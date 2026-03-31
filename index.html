@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Ramp Logo Tool</title>
+    <style>
+        body {
+            display: flex;
+            font-family: Arial;
+            background: #222;
+            color: white;
+        }
+
+        .panel {
+            width: 300px;
+            padding: 10px;
+            background: #333;
+        }
+
+        .viewer {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        img {
+            max-width: 100%;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input[type=range] {
+            width: 100%;
+        }
+
+        .debug {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 5px;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 20px;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="panel">
+
+        <h3>Logo A</h3>
+        <input type="file" id="fileA">
+
+        <label>X Position</label>
+        <input type="range" id="xA" min="-100" max="100" value="0">
+
+        <label>Y Position</label>
+        <input type="range" id="yA" min="-50" max="50" value="0">
+
+        <label>Scale</label>
+        <input type="range" id="scaleA" min="1" max="100" value="20">
+
+        <label>Rotation</label>
+        <input type="range" id="rotA" min="0" max="360" value="0">
+
+        <label>Z Height</label>
+        <input type="range" id="heightA" min="0.1" max="5" step="0.1" value="0.8">
+
+        <div class="debug" id="debugA"></div>
+
+
+        <h3>Logo B</h3>
+        <input type="file" id="fileB">
+
+        <label>X Position</label>
+        <input type="range" id="xB" min="-100" max="100" value="0">
+
+        <label>Y Position</label>
+        <input type="range" id="yB" min="-50" max="50" value="0">
+
+        <label>Scale</label>
+        <input type="range" id="scaleB" min="1" max="100" value="20">
+
+        <label>Rotation</label>
+        <input type="range" id="rotB" min="0" max="360" value="0">
+
+        <label>Z Height</label>
+        <input type="range" id="heightB" min="0.1" max="5" step="0.1" value="1.6">
+
+        <div class="debug" id="debugB"></div>
+
+        <button onclick="generate()">Generate STL</button>
+
+    </div>
+
+    <div class="viewer">
+        <img id="preview" src="" />
+    </div>
+
+    <script>
+        function updateDebug() {
+            debugA.innerText = `A: x=${xA.value}, y=${yA.value}, scale=${scaleA.value}, z=${heightA.value}`;
+            debugB.innerText = `B: x=${xB.value}, y=${yB.value}, scale=${scaleB.value}, z=${heightB.value}`;
+        }
+
+        document.querySelectorAll("input").forEach(el => {
+            el.oninput = updateDebug;
+        });
+
+        updateDebug();
+
+        async function generate() {
+            const formData = new FormData();
+
+            // FILES
+            if (fileA.files[0]) formData.append("fileA", fileA.files[0]);
+            if (fileB.files[0]) formData.append("fileB", fileB.files[0]);
+
+            // LOGO A
+            formData.append("xA", parseFloat(xA.value));
+            formData.append("yA", parseFloat(yA.value));
+            formData.append("scaleA", parseFloat(scaleA.value));
+            formData.append("rotA", parseFloat(rotA.value));
+            formData.append("heightA", parseFloat(heightA.value));
+
+            // LOGO B
+            formData.append("xB", parseFloat(xB.value));
+            formData.append("yB", parseFloat(yB.value));
+            formData.append("scaleB", parseFloat(scaleB.value));
+            formData.append("rotB", parseFloat(rotB.value));
+            formData.append("heightB", parseFloat(heightB.value));
+
+            console.log("SENDING FORM:", Object.fromEntries(formData));
+
+            const res = await fetch("http://127.0.0.1:8000/generate", {
+                method: "POST",
+                body: formData
+            });
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            preview.src = url;
+        }
+    </script>
+
+</body>
+
+</html>
