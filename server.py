@@ -1,80 +1,60 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-import subprocess
-import uuid
-import os
-from fastapi import Form
-import shutil
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import FileResponse
+import shutil, subprocess, uuid, os
 
 app = FastAPI()
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"
-WORK_DIR = "jobs"
-os.makedirs(WORK_DIR, exist_ok=True)
 
 
-@app.get("/", response_class=HTMLResponse)
-def home():
-    with open("index.html", "r") as f:
-        return f.read()
+@app.get("/")
+def root():
+    return FileResponse("index.html")
 
 
 @app.post("/generate")
 async def generate(
-    fileA: UploadFile = File(...),
-    fileB: UploadFile = File(None),
-    xA: float = Form(0),
-    yA: float = Form(0),
-    scaleA: float = Form(20),
-    rotA: float = Form(0),
-    heightA: float = Form(0.8),
-    xB: float = Form(0),
-    yB: float = Form(0),
-    scaleB: float = Form(20),
-    rotB: float = Form(0),
-    heightB: float = Form(1.6),
+    layout: UploadFile = File(...),
+    heightA: float = Form(1),
+    heightB: float = Form(1),
+    colorA: str = Form("#ffffff"),
+    colorB: str = Form("#cccccc"),
 ):
-    job_id = str(uuid.uuid4())
+    job = str(uuid.uuid4())
     os.makedirs("jobs", exist_ok=True)
 
-    pathA = f"jobs/{job_id}_A.svg"
-    pathB = f"jobs/{job_id}_B.svg"
-    out_path = f"jobs/{job_id}.stl"
+    layout_path = f"jobs/{job}.svg"
+    out_path = f"jobs/{job}.stl"
 
-    with open(pathA, "wb") as f:
-        shutil.copyfileobj(fileA.file, f)
-
-    if fileB:
-        with open(pathB, "wb") as f:
-            shutil.copyfileobj(fileB.file, f)
+    with open(layout_path, "wb") as f:
+        shutil.copyfileobj(layout.file, f)
 
     cmd = [
-        BLENDER,
+        r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe",
         "-b",
         "template.blend",
         "-P",
         "apply_logo.py",
         "--",
+        # files
         pathA,
         pathB,
-        out_path,
+        output_path,
+        # LOGO A
         str(xA),
         str(yA),
         str(scaleA),
         str(rotA),
         str(heightA),
+        str(colorA),
+        # LOGO B
         str(xB),
         str(yB),
         str(scaleB),
         str(rotB),
         str(heightB),
+        str(colorB),
     ]
-
-    print("CMD:", cmd)
-
+    print(cmd)
     subprocess.run(cmd)
 
-    return FileResponse(out_path, media_type="application/octet-stream")
+    return FileResponse(out_path)

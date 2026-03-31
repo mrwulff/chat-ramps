@@ -2,50 +2,38 @@
 <html>
 
 <head>
-    <title>Ramp Logo Tool</title>
+    <title>Ramp Tool</title>
     <style>
         body {
             margin: 0;
             display: flex;
-            font-family: Arial;
             background: #222;
             color: white;
+            font-family: Arial;
         }
 
         .panel {
             width: 320px;
             padding: 10px;
             background: #333;
-            overflow-y: auto;
+            overflow: auto;
         }
 
-        .canvas {
+        .canvasWrap {
             flex: 1;
-            position: relative;
-            background: #555;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
         }
 
-        #canvasInner {
-            position: relative;
-            width: 800px;
-            height: 250px;
+        svg {
             background: #777;
             border-radius: 10px;
-            overflow: hidden;
-        }
-
-        .logo {
-            position: absolute;
-            transform-origin: center center;
-            pointer-events: none;
         }
 
         label {
-            display: block;
             margin-top: 10px;
+            display: block;
             font-size: 13px;
         }
 
@@ -56,21 +44,15 @@
         .debug {
             font-size: 11px;
             color: #aaa;
-            margin-top: 5px;
         }
 
         button {
-            width: 100%;
             margin-top: 20px;
+            width: 100%;
             padding: 10px;
             background: #4CAF50;
-            color: white;
             border: none;
-            cursor: pointer;
-        }
-
-        img {
-            max-width: 150px;
+            color: white;
         }
     </style>
 </head>
@@ -82,20 +64,20 @@
         <h3>Logo A</h3>
         <input type="file" id="fileA">
 
-        <label>X Position</label>
-        <input type="range" id="xA" min="0" max="800" value="100">
+        <label>X</label><input type="range" id="xA" min="0" max="800" value="150">
+        <label>Y</label><input type="range" id="yA" min="0" max="250" value="120">
+        <label>Scale</label><input type="range" id="scaleA" min="1" max="100" value="20">
+        <label>Rotation</label><input type="range" id="rotA" min="0" max="360" value="0">
+        <label>Extrude Height</label><input type="range" id="heightA" min="0.1" max="5" step="0.1" value="0.8">
 
-        <label>Y Position</label>
-        <input type="range" id="yA" min="0" max="250" value="100">
+        <label>Color</label>
+        <input type="color" id="colorA" value="#ffffff">
 
-        <label>Scale</label>
-        <input type="range" id="scaleA" min="1" max="100" value="20">
-
-        <label>Rotation</label>
-        <input type="range" id="rotA" min="0" max="360" value="0">
-
-        <label>Z Height</label>
-        <input type="range" id="heightA" min="0.1" max="5" step="0.1" value="0.8">
+        <select id="filamentA">
+            <option value="#ffffff">PLA White</option>
+            <option value="#000000">PLA Black</option>
+            <option value="#d4af37">PLA Gold</option>
+        </select>
 
         <div class="debug" id="debugA"></div>
 
@@ -103,125 +85,104 @@
         <h3>Logo B</h3>
         <input type="file" id="fileB">
 
-        <label>X Position</label>
-        <input type="range" id="xB" min="0" max="800" value="300">
+        <label>X</label><input type="range" id="xB" min="0" max="800" value="500">
+        <label>Y</label><input type="range" id="yB" min="0" max="250" value="120">
+        <label>Scale</label><input type="range" id="scaleB" min="1" max="100" value="20">
+        <label>Rotation</label><input type="range" id="rotB" min="0" max="360" value="0">
+        <label>Extrude Height</label><input type="range" id="heightB" min="0.1" max="5" step="0.1" value="1.6">
 
-        <label>Y Position</label>
-        <input type="range" id="yB" min="0" max="250" value="100">
+        <label>Color</label>
+        <input type="color" id="colorB" value="#cccccc">
 
-        <label>Scale</label>
-        <input type="range" id="scaleB" min="1" max="100" value="20">
-
-        <label>Rotation</label>
-        <input type="range" id="rotB" min="0" max="360" value="0">
-
-        <label>Z Height</label>
-        <input type="range" id="heightB" min="0.1" max="5" step="0.1" value="1.6">
+        <select id="filamentB">
+            <option value="#cccccc">PLA Gray</option>
+            <option value="#ff0000">PLA Red</option>
+        </select>
 
         <div class="debug" id="debugB"></div>
 
-        <button type="button" onclick="generate()">Generate STL</button>
+        <button onclick="generate()">Generate STL</button>
 
     </div>
 
-    <div class="canvas">
-        <div id="canvasInner">
-
-            <!-- LOGO PREVIEWS -->
-            <img id="previewA" class="logo">
-            <img id="previewB" class="logo">
-
-        </div>
+    <div class="canvasWrap">
+        <svg id="canvasSVG" width="800" height="250"></svg>
     </div>
 
     <script>
-        const previewA = document.getElementById("previewA");
-        const previewB = document.getElementById("previewB");
+        const svg = document.getElementById("canvasSVG");
 
-        // LOAD SVG PREVIEW
-        fileA.onchange = () => {
-            const f = fileA.files[0];
-            if (f) previewA.src = URL.createObjectURL(f);
-        };
+        function loadSVG(file, id) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(e.target.result, "image/svg+xml");
 
-        fileB.onchange = () => {
-            const f = fileB.files[0];
-            if (f) previewB.src = URL.createObjectURL(f);
-        };
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                g.innerHTML = doc.documentElement.innerHTML;
+                g.id = id;
 
-
-        // UPDATE VISUAL POSITION
-        function updatePreview() {
-
-            // A
-            previewA.style.left = xA.value + "px";
-            previewA.style.top = yA.value + "px";
-            previewA.style.transform =
-                `translate(-50%, -50%) scale(${scaleA.value / 20}) rotate(${rotA.value}deg)`;
-
-            // B
-            previewB.style.left = xB.value + "px";
-            previewB.style.top = yB.value + "px";
-            previewB.style.transform =
-                `translate(-50%, -50%) scale(${scaleB.value / 20}) rotate(${rotB.value}deg)`;
-
-            // DEBUG
-            debugA.innerText =
-                `UI → x:${xA.value}, y:${yA.value}, scale:${scaleA.value}, z:${heightA.value}`;
-
-            debugB.innerText =
-                `UI → x:${xB.value}, y:${yB.value}, scale:${scaleB.value}, z:${heightB.value}`;
+                svg.appendChild(g);
+                update();
+            };
+            reader.readAsText(file);
         }
 
+        fileA.onchange = () => loadSVG(fileA.files[0], "logoA");
+        fileB.onchange = () => loadSVG(fileB.files[0], "logoB");
 
-        // SLIDER HOOKS
-        document.querySelectorAll("input[type=range]").forEach(el => {
-            el.oninput = updatePreview;
-        });
+        filamentA.onchange = () => colorA.value = filamentA.value;
+        filamentB.onchange = () => colorB.value = filamentB.value;
 
-        updatePreview();
+        function update() {
 
+            const A = document.getElementById("logoA");
+            const B = document.getElementById("logoB");
 
-        // SEND TO BACKEND
-        async function generate() {
+            if (A) {
+                A.setAttribute("transform",
+                    `translate(${xA.value},${yA.value})
+       scale(${scaleA.value / 20})
+       rotate(${rotA.value})`);
 
-            const formData = new FormData();
-
-            if (fileA.files[0]) formData.append("fileA", fileA.files[0]);
-            if (fileB.files[0]) formData.append("fileB", fileB.files[0]);
-
-            // CONVERT UI PIXELS → BLENDER SPACE
-            // simple linear mapping (adjust later if needed)
-            const scaleFactor = 0.05;
-
-            formData.append("xA", xA.value * scaleFactor);
-            formData.append("yA", yA.value * scaleFactor);
-            formData.append("scaleA", scaleA.value);
-            formData.append("rotA", rotA.value);
-            formData.append("heightA", heightA.value);
-
-            formData.append("xB", xB.value * scaleFactor);
-            formData.append("yB", yB.value * scaleFactor);
-            formData.append("scaleB", scaleB.value);
-            formData.append("rotB", rotB.value);
-            formData.append("heightB", heightB.value);
-
-            console.log("FORM:", Object.fromEntries(formData));
-
-            const res = await fetch("/generate", {
-                method: "POST",
-                body: formData
-            });
-
-            if (!res.ok) {
-                console.error("FAILED", await res.text());
-                return;
+                A.setAttribute("fill", colorA.value);
             }
+
+            if (B) {
+                B.setAttribute("transform",
+                    `translate(${xB.value},${yB.value})
+       scale(${scaleB.value / 20})
+       rotate(${rotB.value})`);
+
+                B.setAttribute("fill", colorB.value);
+            }
+
+            debugA.innerText = `x:${xA.value} y:${yA.value} scale:${scaleA.value} z:${heightA.value}`;
+            debugB.innerText = `x:${xB.value} y:${yB.value} scale:${scaleB.value} z:${heightB.value}`;
+        }
+
+        document.querySelectorAll("input, select").forEach(el => el.oninput = update);
+
+        function exportSVG() {
+            return new XMLSerializer().serializeToString(svg);
+        }
+
+        async function generate() {
+            const form = new FormData();
+
+            form.append("layout", new Blob([exportSVG()], { type: "image/svg+xml" }), "layout.svg");
+
+            form.append("heightA", heightA.value);
+            form.append("heightB", heightB.value);
+
+            form.append("colorA", colorA.value);
+            form.append("colorB", colorB.value);
+
+            const res = await fetch("/generate", { method: "POST", body: form });
 
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
 
-            // DOWNLOAD FILE
             const a = document.createElement("a");
             a.href = url;
             a.download = "ramp.stl";

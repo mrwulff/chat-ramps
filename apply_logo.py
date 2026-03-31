@@ -1,174 +1,168 @@
-import bpy, sys
+import bpy
 import bmesh
-from mathutils import Vector
+import sys
 import math
-
 
 argv = sys.argv
 argv = argv[argv.index("--") + 1 :]
 
-svg_a, svg_b, out_path = argv[:3]
+svg_a, svg_b, out_path = argv[0], argv[1], argv[2]
 
-params = list(map(float, argv[3:]))
+xA = argv[3]
+yA = argv[4]
+scaleA = argv[5]
+# rotA = argv[6]
+# colorA = argv[7]
 
-xA, yA, sA, rA, hA, xB, yB, sB, rB, hB = params
+# xB, yB, scaleB, rotB = map(float, argv[9:13])
+# colorB = argv[14]
 
 
-def import_svg(path):
+# -------------------------------
+# IMPORT + NORMALIZE SVG
+# -------------------------------
+def import_svg(path, name):
     print(f"\nIMPORTING: {path}")
 
     before = set(bpy.data.objects)
-
     bpy.ops.import_curve.svg(filepath=path)
-
     after = set(bpy.data.objects)
+
     new_objs = list(after - before)
 
     if not new_objs:
         raise RuntimeError(f"SVG IMPORT FAILED: {path}")
 
-    print(f"Imported {len(new_objs)} objects")
+    curves = [o for o in new_objs if o.type == "CURVE"]
+    if not curves:
+        raise RuntimeError("No CURVE objects found")
 
-    # join all curves into one
     bpy.ops.object.select_all(action="DESELECT")
-    for o in new_objs:
+
+    for o in curves:
         o.select_set(True)
+        o.data.extrude = 0.001  # temporary
 
-        if o.type == "CURVE":
-            o.data.extrude = 0.001  # keep your extrusion
-
-    bpy.context.view_layer.objects.active = new_objs[0]
+    bpy.context.view_layer.objects.active = curves[0]
     bpy.ops.object.join()
 
-    # CENTER OBJECT TO ORIGIN (CRITICAL)
-
     obj = bpy.context.active_object
-    obj.name = "name"
+    obj.name = name
 
     bpy.context.view_layer.update()
 
-    # get mesh
-    if obj.type == "CURVE":
+    if obj.type != "MESH":
         bpy.ops.object.convert(target="MESH")
 
     mesh = obj.data
 
-    # enter edit mode
-    bpy.context.view_layer.objects.active = obj
+    # ---- EDIT MODE ----
     bpy.ops.object.mode_set(mode="EDIT")
-
     bm = bmesh.from_edit_mesh(mesh)
 
-    # compute center in LOCAL space
+    # CENTER
     xs = [v.co.x for v in bm.verts]
     ys = [v.co.y for v in bm.verts]
 
-    cx = (min(xs) + max(xs)) / 2
-    cy = (min(ys) + max(ys)) / 2
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
 
-    # move geometry to origin
+    cx = (min_x + max_x) / 2
+    cy = (min_y + max_y) / 2
+
     for v in bm.verts:
         v.co.x -= cx
         v.co.y -= cy
 
-    bmesh.update_edit_mesh(mesh)
+    # NORMALIZE WIDTH → 1
+    xs = [v.co.x for v in bm.verts]
+    min_x, max_x = min(xs), max(xs)
+    width = max_x - min_x
 
+    if width == 0:
+        raise RuntimeError("Invalid SVG width")
+
+    scale_to_unit = 1.0 / width
+
+    for v in bm.verts:
+        v.co.x *= scale_to_unit
+        v.co.y *= scale_to_unit
+
+    bmesh.update_edit_mesh(mesh)
     bpy.ops.object.mode_set(mode="OBJECT")
 
-    # reset object location
-    obj.location.x = 0
-    obj.location.y = 0
+    # reset transforms
+    obj.location = (0, 0, 0)
+    obj.rotation_euler = (0, 0, 0)
+    obj.scale = (1, 1, 1)
 
-    print("GEOMETRY NORMALIZED (REAL)")
+    print("NORMALIZED → center=0, width=1")
+
     return obj
 
 
-def place(obj, target_x, target_y, target_width, target_rot, z_height):
-    print("\n========== NEW LOGO ==========")
-    print("INPUT:", target_x, target_y, target_width, target_rot, z_height)
+# -------------------------------
+# APPLY TRANSFORMS (FINAL)
+# -------------------------------
+def place_logo(obj, x, y, scale, rot, height):
+    print("\n========== PLACE LOGO ==========")
+    print("INPUT:", x, y, scale, rot, height)
 
-    bpy.context.view_layer.objects.active = obj
+    # SCALE (XY ONLY)
+    obj.scale = (scale, scale, 1)
 
-    # -----------------------------
-    # INITIAL BBOX
-    # -----------------------------
-    bbox = [obj.matrix_world @ Vector(v) for v in obj.bound_box]
+    # ROTATION (FIXED DIRECTION)
+    obj.rotation_euler[2] = math.radians(-rot)
 
-    min_x = min(v.x for v in bbox)
-    max_x = max(v.x for v in bbox)
-    min_y = min(v.y for v in bbox)
-    max_y = max(v.y for v in bbox)
+    # POSITION (DIRECT — no offsets anymore)
+    obj.location.x = x
+    obj.location.y = y
 
-    width = max_x - min_x
-
-    print("INITIAL WIDTH:", width)
-
-    # -----------------------------
-    # SCALE (NO APPLY)
-    # -----------------------------
-    if width > 0:
-        scale_factor = target_width / width
-        obj.scale *= scale_factor
-
-    # -----------------------------
-    # ROTATION
-    # -----------------------------
-    obj.rotation_euler[2] = math.radians(target_rot)
-
-    # -----------------------------
-    # UPDATE + NEW BBOX
-    # -----------------------------
     bpy.context.view_layer.update()
 
-    bbox = [obj.matrix_world @ Vector(v) for v in obj.bound_box]
+    # --- Z: SET TRUE HEIGHT (NOT SCALE) ---
+    mesh = obj.data
 
-    min_x = min(v.x for v in bbox)
-    max_x = max(v.x for v in bbox)
-    min_y = min(v.y for v in bbox)
-    max_y = max(v.y for v in bbox)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bm = bmesh.from_edit_mesh(mesh)
 
-    center_x = (min_x + max_x) / 2
-    center_y = (min_y + max_y) / 2
+    # flatten first (reset any weird Z)
+    for v in bm.verts:
+        v.co.z = 0
 
-    print("CENTER AFTER SCALE:", center_x, center_y)
+    # extrude upward
+    bmesh.ops.extrude_face_region(bm, geom=bm.faces)
+    bm.verts.ensure_lookup_table()
 
-    # -----------------------------
-    # MOVE USING CENTER
-    # -----------------------------
-    dx = target_x - center_x
-    dy = target_y - center_y
+    for v in bm.verts:
+        if v.co.z > 0:
+            v.co.z = height
 
-    obj.location.x += dx
-    obj.location.y += dy
+    bmesh.update_edit_mesh(mesh)
+    bpy.ops.object.mode_set(mode="OBJECT")
 
-    print("MOVE DELTA:", dx, dy)
+    # --- SNAP TO RAMP (Z=0 BASE) ---
+    obj.location.z = 0
 
-    # -----------------------------
-    # Z HEIGHT (IMPORTANT FIX)
-    # -----------------------------
-    # -----------------------------
-    # FIX Z USING BOTTOM OF MESH
-    # -----------------------------
-    bpy.context.view_layer.update()
-
-    bbox = [obj.matrix_world @ Vector(v) for v in obj.bound_box]
-    min_z = min(v.z for v in bbox)
-
-    dz = z_height - min_z
-    obj.location.z += dz
-
-    print("Z FIX:", min_z, "->", z_height, "delta:", dz)
     print("FINAL LOCATION:", obj.location)
 
 
-# IMPORT + PLACE
-logoA = import_svg(svg_a)
-place(logoA, xA, yA, sA, rA, hA)
+# -------------------------------
+# RUN PIPELINE
+# -------------------------------
+print("START CLEAN PIPELINE")
 
-if svg_b and svg_b != "None":
-    logoB = import_svg(svg_b)
-    place(logoB, xB, yB, sB, rB, hB)
+logo_a = import_svg(svg_a, "LOGO_A")
+logo_b = import_svg(svg_b, "LOGO_B")
+
+place_logo(logo_a, xA, yA, scaleA, rotA, heightA)
+place_logo(logo_b, xB, yB, scaleB, rotB, heightB)
 
 
-# EXPORT
-bpy.ops.export_mesh.stl(filepath=out_path)
+# -------------------------------
+# EXPORT STL (BLENDER 5 FIX)
+# -------------------------------
+bpy.ops.object.select_all(action="SELECT")
+bpy.ops.wm.stl_export(filepath=out_path)
+
+print("DONE")
